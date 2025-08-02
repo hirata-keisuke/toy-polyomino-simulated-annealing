@@ -121,11 +121,11 @@ def show_piece_display(store):
 
 @dash.callback(
     Output("redirect-to-result", "pathname"), Output("shared-data", "data", allow_duplicate=True),
-    Input("run-solver", "n_clicks"), Input("num_reads", "value"),
-    State("shared-data", "data"), State({"type": "piece-num", "index": dash.ALL}, "value"),
+    Input("run-solver", "n_clicks"),
+    State("shared-data", "data"), State({"type": "piece-num", "index": dash.ALL}, "value"), State("num_reads", "value"),
     prevent_initial_call=True
 )
-def run_solver(n_clicks, num_reads, store, piece_nums):
+def run_solver(n_clicks, store, piece_nums, num_reads):
     if n_clicks == 0 or num_reads is None or num_reads <= 0:
         return "/annealing", store
     board = json.loads(store["ボード"])

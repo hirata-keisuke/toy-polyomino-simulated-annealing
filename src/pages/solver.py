@@ -79,7 +79,7 @@ class Solver:
                 used[idx] += num
         for u, l in zip(used.values(), self.limits):
             if u > l:
-                msg = "使いすぎ"
+                return "使いすぎ", deepcopy(self.board.grid)
         for idx, num in result.items():
             if num == 1:
                 idx1, idx2 = idx.split("-")
@@ -88,7 +88,7 @@ class Solver:
                 if self.board.can_place(v.piece_shape, r, c):
                     self.board.fill(v, r, c)
                 else:
-                    return msg, deepcopy(self.board.grid)
+                    return "配置不可", deepcopy(self.board.grid)
         if np.any(np.array(self.board.grid)==0):
             return "空きあり", deepcopy(self.board.grid)
         return "成功", deepcopy(self.board.grid)
