@@ -38,11 +38,11 @@ class Solver:
         self.variables = {}
         for piece_id, piece in zip(self.piece_ids, self.pieces):
             self.variables[piece_id] = []
-            rotate_idx = 1
+            rotate_position_idx = 1
             for variation in piece.variations:
                 for pos in self.board.scan_position_to_place(variation):
-                    self.variables[piece_id].append(Variable(pos, variation, f"{piece_id}-{rotate_idx}"))
-                    rotate_idx+=1
+                    self.variables[piece_id].append(Variable(pos, variation, f"{piece_id}-{rotate_position_idx}"))
+                    rotate_position_idx+=1
 
         self.conditions_use = []
         for variable_list, limit in zip(self.variables.values(), limits):
