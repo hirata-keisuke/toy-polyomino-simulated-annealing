@@ -29,6 +29,7 @@ class Variable:
 
 class Solver:
     def __init__(self, board_grid, piece_grids, piece_ids, limits):
+        self.original_grid = board_grid
         self.board = Board(board_grid)
         self.limits = limits
 
@@ -38,11 +39,11 @@ class Solver:
         self.variables = {}
         for piece_id, piece in zip(self.piece_ids, self.pieces):
             self.variables[piece_id] = []
-            rotate_position_idx = 1
+            local_idx = 1
             for variation in piece.variations:
                 for pos in self.board.scan_position_to_place(variation):
-                    self.variables[piece_id].append(Variable(pos, variation, f"{piece_id}-{rotate_position_idx}"))
-                    rotate_position_idx+=1
+                    self.variables[piece_id].append(Variable(pos, variation, f"{piece_id}-{local_idx}"))
+                    local_idx += 1
 
         self.conditions_use = []
         for variable_list, limit in zip(self.variables.values(), limits):
@@ -51,11 +52,13 @@ class Solver:
         self.conditions_fill = []
         for r in range(self.board.rows):
             for c in range(self.board.cols):
+                if self.board.grid[r][c] is None:
+                    continue
                 self.conditions_fill.append(
                     (sum([v.var for variables in self.variables.values() for v in variables if v.is_related_position(r, c)])-1)**2
                 )
         
-    def run(self, num_reads, coef_use=10, coef_fill=20):
+    def run(self, num_reads, coef_use=10, coef_fill=20, early_stop=True):
         objective = coef_use*sum(self.conditions_use) + coef_fill*sum(self.conditions_fill)
         bqm = objective.compile().to_bqm()
         sampler = SimulatedAnnealingSampler()
@@ -63,48 +66,49 @@ class Solver:
 
         self.results = []
         for result in _results:
-            self.results.append(self.__impose_conditions(result))
+            evaluated = self.__impose_conditions(result)
+            self.results.append(evaluated)
+            if early_stop and evaluated[0] == "成功":
+                break
 
     def __impose_conditions(self, result):
-        self.board.wipe_out()
-        used = {}
-        msg = ""
-        for idx, num in result.items():
-            idx, _ = idx.split("-")
-            idx = int(idx)
-            if idx in used.keys():
-                used[idx] += num
-            else:
-                used[idx] = 0
-                used[idx] += num
-        for u, l in zip(used.values(), self.limits):
-            if u > l:
-                return "使いすぎ", deepcopy(self.board.grid)
-        for idx, num in result.items():
-            if num == 1:
-                idx1, idx2 = idx.split("-")
-                v = self.variables[int(idx1)][int(idx2)-1]
-                r, c = v.position
-                if self.board.can_place(v.piece_shape, r, c):
-                    self.board.fill(v, r, c)
-                else:
-                    return "配置不可", deepcopy(self.board.grid)
-        if np.any(np.array(self.board.grid)==0):
-            return "空きあり", deepcopy(self.board.grid)
-        return "成功", deepcopy(self.board.grid)
+        board = Board(deepcopy(self.original_grid))
 
-def solve(board_grid, pieces, piece_ids, limit_nums, num_reads):
+        # piece_id ごとの使用数を集計（piece_id の順序を保つ）
+        used = {pid: 0 for pid in self.piece_ids}
+        for var_name, num in result.items():
+            idx1, _ = var_name.split("-")
+            used[int(idx1)] += num
+
+        # 使用数制約チェック
+        for pid, limit in zip(self.piece_ids, self.limits):
+            if used[pid] > limit:
+                return "使いすぎ", deepcopy(board.grid)
+
+        # 配置を試みる（衝突があれば「空きあり」として扱い、配置できた分は反映）
+        conflict = False
+        for var_name, num in result.items():
+            if num == 1:
+                idx1, idx2 = var_name.split("-")
+                v = self.variables[int(idx1)][int(idx2) - 1]
+                r, c = v.position
+                if board.can_place(v.piece_shape, r, c):
+                    board.fill(v, r, c)
+                else:
+                    conflict = True
+
+        if conflict or np.any(np.array(board.grid) == 0):
+            return "空きあり", deepcopy(board.grid)
+        return "成功", deepcopy(board.grid)
+
+def solve(board_grid, pieces, piece_ids, limit_nums, num_reads, coef_use=10, coef_fill=20, early_stop=True):
     solver = Solver(board_grid, pieces, piece_ids, limit_nums)
-    solver.run(num_reads)
+    solver.run(num_reads, coef_use=coef_use, coef_fill=coef_fill, early_stop=early_stop)
 
     summary = Counter([r[0] for r in solver.results])
-    for result in solver.results:
-        if result[0] == "成功":
-            return result[0], result[1], json.dumps(summary)
-    for result in solver.results:
-        if result[0] == "空きあり":
-            return result[0], result[1], json.dumps(summary)
-    for result in solver.results:
-        if result[0] == "使いすぎ":
-            return result[0], result[1], json.dumps(summary)
-    return result[0], result[1], json.dumps(summary)
+    for priority in ("成功", "空きあり", "使いすぎ"):
+        for result in solver.results:
+            if result[0] == priority:
+                return result[0], result[1], json.dumps(summary)
+    # フォールバック（全件いずれかを返す）
+    return solver.results[-1][0], solver.results[-1][1], json.dumps(summary)

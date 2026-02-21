@@ -33,7 +33,7 @@ sidebar = html.Div(
 )
 
 app.layout = html.Div([
-    dcc.Store(id='shared-data', data={"ボード": None, "ピース": [], "結果": None, "結果文字": "", "resule_summary": ""}, storage_type="session"),
+    dcc.Store(id='shared-data', data={"ボード": None, "ピース": [], "ピース枚数": [], "結果": None, "結果文字": "", "resule_summary": ""}, storage_type="session"),
     sidebar,
     html.Div(
         [dash.page_container],

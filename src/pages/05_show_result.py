@@ -1,12 +1,17 @@
 import dash
 import json
+import dash_bootstrap_components as dbc
 
 from dash import html, Input, Output, dash_table
 
 dash.register_page(__name__, path="/show-result", name="結果の表示", title="結果の表示")
 
 layout = html.Div(style={"fontFamily": "Inter, sans-serif", "textAlign": "center", "padding": "20px"}, children=[
-    html.H1("探索された配置", style={"color": "#333", "marginBottom": "30px"}),
+    html.H1("探索された配置", style={"color": "#333", "marginBottom": "20px"}),
+    dbc.Button(
+        "← アニーリングページへ戻る", href="/annealing", color="secondary",
+        style={"marginBottom": "24px"}
+    ),
     html.Div(
         children=[], id="result-display-area",
         style={"display": "flex", "justifyContent": "center", "alignItems": "center", "minHeight": "200px"}

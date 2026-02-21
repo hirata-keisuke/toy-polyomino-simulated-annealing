@@ -1,147 +1,199 @@
 import dash
 import dash_bootstrap_components as dbc
 import json
-import numpy as np
 
-from dash import html, Input, Output, State, callback_context
+from dash import html, dcc, Input, Output, State, callback_context
 from .piece import Piece
+
 
 dash.register_page(__name__, path="/define-piece", name="ピースの定義ページ", title="ピースの定義ページ")
 
-difine_piece_section = dbc.Col(
-    html.Div(
-        style={"fontFamily": "Inter, sans-serif", "textAlign": "center", "padding": "20px"}, 
-        children=[
-            html.H1("ピースの定義", style={"color": "#333", "marginBottom": "30px"}, id="piece-define-page-title"),
-            html.Div([
-                html.P("各テキストボックスにピースの行データを「0」と「1」のカンマ区切りで入力してください。"),
-                html.P("「0」はピース上でミノが無い部分、「1」はミノがある部分を表します。")
-            ], style={"fontSize": "1.1em", "color": "#555"}),
-            dbc.Button(
-                "行を追加", id="add-piece-row-button", n_clicks=0,
-                style={"padding": "12px 25px", "marginTop": "30px", "marginBottom": "20px"}
-            ),
-            html.Div(id="textbox-container-piece", children=[], style={"display": "flex", "flexDirection": "column", "alignItems": "center"}),
-            dbc.Button(
-                "追加", color="success", id="add-piece-button", n_clicks=0,
-                style={"padding": "12px 25px", "marginTop": "30px", "marginBottom": "20px"}
-            )
-        ]
-    ), md=6)
-
-display_pieces_section = dbc.Col(
-    html.Div([
-        html.H1("定義したピースの一覧"),
-        html.Div(children=[], id="piece-display-area-sub", style={"textAlign": "center"})
-    ]),
-    md=6
-)
-
-layout = html.Div([dbc.Row([difine_piece_section, display_pieces_section])])
-
-
-@dash.callback(
-    Output("textbox-container-piece", "children"),
-    Input("add-piece-row-button", "n_clicks"),
-    State("textbox-container-piece", "children"),
-    prevent_initial_call=True
-)
-def add_textbox(n_clicks, existing_children):
-    new_row_id = f"row-{n_clicks}"
-    new_textbox_id = f"textbox-{n_clicks}"
-
-    new_row = html.Div([
-        dbc.Input(
-            id={"type": "board-input", "index": new_textbox_id},
-            type="text", placeholder=f"(例: 0,1,1)",
+layout = html.Div(
+    [
+        dcc.Store(id="piece-grid-state", data=[]),
+        dbc.Row(
+            [
+                # 左カラム: ピース定義
+                dbc.Col(
+                    html.Div(
+                        style={"fontFamily": "Inter, sans-serif", "textAlign": "center", "padding": "20px"},
+                        children=[
+                            html.H1("ピースの定義", style={"color": "#333", "marginBottom": "30px"}),
+                            html.Div(
+                                [
+                                    html.P("行数と列数を入力してグリッドを生成し、セルをクリックしてピース形状を決めてください。"),
+                                    html.P("色付きセルがミノのある部分です。"),
+                                ],
+                                style={"fontSize": "1.1em", "color": "#555"},
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dbc.Input(id="piece-rows-input", type="number", placeholder="行数", min=1, max=10, value=3),
+                                        width=3,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Input(id="piece-cols-input", type="number", placeholder="列数", min=1, max=10, value=3),
+                                        width=3,
+                                    ),
+                                    dbc.Col(
+                                        dbc.Button("グリッドを生成", id="generate-piece-button", color="primary", n_clicks=0),
+                                        width="auto",
+                                    ),
+                                ],
+                                justify="center",
+                                className="mb-4 mt-3",
+                                style={"gap": "10px"},
+                            ),
+                            html.Div(id="piece-grid", style={"display": "inline-block", "marginBottom": "20px"}),
+                            html.Br(),
+                            dbc.Button(
+                                "追加",
+                                color="success",
+                                id="add-piece-button",
+                                n_clicks=0,
+                                style={"padding": "12px 25px", "marginTop": "10px", "marginBottom": "20px"},
+                            ),
+                            html.Div(id="piece-validation-message", style={"color": "red", "marginTop": "10px"}),
+                        ],
+                    ),
+                    md=6,
+                ),
+                # 右カラム: 定義済みピース一覧
+                dbc.Col(
+                    html.Div(
+                        [
+                            html.H1("定義したピースの一覧"),
+                            html.Div(children=[], id="piece-display-area-sub", style={"textAlign": "center"}),
+                        ]
+                    ),
+                    md=6,
+                ),
+            ]
         ),
-        dbc.Button(
-            "削除", id={"type": "remove-row-button", "index": new_row_id}, color="danger", n_clicks=0, 
-            style={"margin": "5px", "fontSize": "0.9em", "width": "5em"}
-        )
-    ], id=new_row_id, style={"display": "flex", "alignItems": "center"})
-    existing_children.append(new_row)
-    return existing_children
-
-@dash.callback(
-    Output("textbox-container-piece", "children", allow_duplicate=True),
-    Input({"type": "remove-row-button", "index": dash.ALL}, "n_clicks"),
-    State("textbox-container-piece", "children"),
-    prevent_initial_call=True
-)
-def remove_textbox(n_clicks_list, existing_children):
-    ctx = callback_context
-    if not ctx.triggered:
-        return existing_children
-
-    triggered_id = ctx.triggered[0]["prop_id"]
-    button_id_str = triggered_id.split(".")[0]
-    button_id = json.loads(button_id_str)
-    
-    if button_id["type"] == "remove-row-button" and ctx.triggered[0]["value"] > 0:
-        row_to_remove_id = button_id["index"]
-        new_children = [child for child in existing_children if child["props"]["id"] != row_to_remove_id]
-        return new_children
-
-    return dash.no_update
-
-@dash.callback(
-    Output("piece-display-area-sub", "children"), Output("shared-data", "data", allow_duplicate=True),
-    Input("add-piece-button", "n_clicks"),
-    State("textbox-container-piece", "children"), State("shared-data", "data"),
-    prevent_initial_call=True
-)
-def add_piece(n_clicks, piece_definition_components, store):
-    piece_definition_data = [
-        c["props"]["children"][0]["props"]["value"].split(",") for c in piece_definition_components
-        if c["props"]["children"][0]["props"].get("value") is not None
     ]
-    
-    if len(piece_definition_data) == 0 and len(store["ピース"]) == 0:
-        return html.Div("表示するピースがありません。", style={"textAlign": "center", "marginTop": "20px"}), store
-    
-    try:
-        np.array(piece_definition_data)
-    except:
-        return html.Div("形状が間違っています。全ての行の個数を同じにしてください。", style={"textAlign": "center", "marginTop": "20px"}), store
-    
-    pieces = [tuple(p) for p in store["ピース"]]
-    if len(piece_definition_data) != 0:
-        for row in piece_definition_data:
-            for cell in row:
-                if cell not in ("0", "1"):
-                    return html.Div("無効な文字が使用されています。", style={"textAlign": "center", "marginTop": "20px"}), store
+)
 
-        piece = Piece(piece_definition_data)
-        dumped_piece = piece.dump()
-        if dumped_piece not in pieces:
-            pieces.append(dumped_piece)
-        store["ピース"] = list(pieces)
 
+def _render_piece_grid(grid, color="#4A90D9"):
+    """grid (2D list of 0 or 1) をクリック可能な Div グリッドとしてレンダリングする"""
+    rows = []
+    for r, row in enumerate(grid):
+        cells = []
+        for c, val in enumerate(row):
+            is_filled = val == 1
+            cells.append(
+                html.Div(
+                    id={"type": "piece-cell", "index": f"{r}-{c}"},
+                    n_clicks=0,
+                    style={
+                        "width": "40px",
+                        "height": "40px",
+                        "backgroundColor": color if is_filled else "#fff",
+                        "border": "1px solid #aaa",
+                        "cursor": "pointer",
+                        "boxSizing": "border-box",
+                    },
+                )
+            )
+        rows.append(html.Div(children=cells, style={"display": "flex"}))
+    return html.Div(children=rows)
+
+
+def _render_piece_list(pieces):
+    """保存済みピースのリストを表示用 Div として返す"""
     piece_display = []
     for piece in pieces:
-        rows = []
         grid = json.loads(piece[0])
         color = piece[1]
+        rows = []
         for row in grid:
             cells = []
             for cell_value in row:
-                if cell_value == 1:
-                    cell_color = color
-                else:
-                    cell_color = "white"
-                cell_style = {
-                    "width": "30px", 
-                    "height": "30px",
-                    "backgroundColor": cell_color,
-                    "border": "1px solid #eee",
-                    "display": "flex",
-                    "color": "#333" if cell_color == "white" else "#eee"
-                }
-                cells.append(html.Div(style=cell_style))
-            cells.append(html.Br())
+                cell_color = color if cell_value == 1 else "white"
+                cells.append(
+                    html.Div(
+                        style={
+                            "width": "30px",
+                            "height": "30px",
+                            "backgroundColor": cell_color,
+                            "border": "1px solid #eee",
+                        }
+                    )
+                )
             rows.append(html.Div(style={"display": "flex", "justifyContent": "center"}, children=cells))
         piece_display.append(
-            html.Div(style={"display": "flex", "flex-direction": "column", "margin": "10px"}, 
-                     children=rows))
-    return html.Div(children=piece_display), store
+            html.Div(style={"display": "flex", "flexDirection": "column", "margin": "10px"}, children=rows)
+        )
+    return html.Div(children=piece_display, style={"display": "flex", "flexWrap": "wrap", "justifyContent": "center"})
+
+
+@dash.callback(
+    Output("piece-grid", "children"),
+    Output("piece-grid-state", "data"),
+    Input("generate-piece-button", "n_clicks"),
+    State("piece-rows-input", "value"),
+    State("piece-cols-input", "value"),
+    prevent_initial_call=True,
+)
+def generate_piece_grid(_n_clicks, rows, cols):
+    if not rows or not cols or rows <= 0 or cols <= 0:
+        return dash.no_update, dash.no_update
+    grid = [[0] * int(cols) for _ in range(int(rows))]
+    return _render_piece_grid(grid), grid
+
+
+@dash.callback(
+    Output("piece-grid", "children", allow_duplicate=True),
+    Output("piece-grid-state", "data", allow_duplicate=True),
+    Input({"type": "piece-cell", "index": dash.ALL}, "n_clicks"),
+    State("piece-grid-state", "data"),
+    prevent_initial_call=True,
+)
+def toggle_piece_cell(_n_clicks_list, grid):
+    ctx = callback_context
+    if not ctx.triggered or not grid:
+        return dash.no_update, dash.no_update
+
+    triggered_id_str = ctx.triggered[0]["prop_id"].split(".")[0]
+    triggered_id = json.loads(triggered_id_str)
+    if triggered_id["type"] != "piece-cell":
+        return dash.no_update, dash.no_update
+
+    r_str, c_str = triggered_id["index"].split("-")
+    r, c = int(r_str), int(c_str)
+
+    grid[r][c] = 0 if grid[r][c] == 1 else 1
+
+    return _render_piece_grid(grid), grid
+
+
+@dash.callback(
+    Output("piece-display-area-sub", "children"),
+    Output("piece-validation-message", "children"),
+    Output("shared-data", "data", allow_duplicate=True),
+    Input("add-piece-button", "n_clicks"),
+    State("piece-grid-state", "data"),
+    State("shared-data", "data"),
+    prevent_initial_call=True,
+)
+def add_piece(_n_clicks, grid, store):
+    pieces = [tuple(p) for p in store["ピース"]]
+
+    if not grid:
+        if not pieces:
+            return html.Div("表示するピースがありません。"), "", store
+        return _render_piece_list(pieces), "", store
+
+    # 1が一つもない場合はエラー
+    flat = [v for row in grid for v in row]
+    if all(v == 0 for v in flat):
+        return _render_piece_list(pieces), "エラー: ミノが選択されていません。", store
+
+    piece = Piece([[str(v) for v in row] for row in grid])
+    dumped = piece.dump()
+    if dumped not in pieces:
+        pieces.append(dumped)
+    store["ピース"] = list(pieces)
+
+    return _render_piece_list(pieces), "", store
